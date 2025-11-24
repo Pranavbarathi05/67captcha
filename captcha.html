@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Funny 1–9 Brainrot Captcha</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #0f172a;
+      color: #e5e7eb;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+    }
+
+    .card {
+      background: #020617;
+      padding: 24px 28px;
+      border-radius: 18px;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+      max-width: 420px;
+      width: 100%;
+      border: 1px solid #1f2937;
+    }
+
+    h1 {
+      margin-top: 0;
+      font-size: 1.4rem;
+      margin-bottom: 8px;
+    }
+
+    p {
+      font-size: 0.9rem;
+      color: #9ca3af;
+      margin: 6px 0;
+    }
+
+    .captcha-input {
+      margin-top: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    input[type="text"] {
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid #4b5563;
+      background: #020617;
+      color: #f9fafb;
+      font-size: 1rem;
+      outline: none;
+    }
+    input[type="text"]:focus {
+      border-color: #60a5fa;
+      box-shadow: 0 0 0 1px #60a5fa33;
+    }
+
+    .error {
+      color: #f97373;
+      font-size: 0.8rem;
+      min-height: 1em;
+    }
+
+    .success {
+      color: #4ade80;
+      font-size: 0.9rem;
+      margin-top: 10px;
+    }
+
+    button {
+      margin-top: 14px;
+      padding: 10px 14px;
+      border-radius: 10px;
+      border: none;
+      background: #22c55e;
+      color: #022c22;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 0.95rem;
+    }
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    /* Camera modal */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.7);
+      display: none;
+      justify-content: center;
+      align-items: center;
+      z-index: 999;
+    }
+
+    .modal {
+      background: #020617;
+      border-radius: 18px;
+      padding: 16px 16px 18px;
+      max-width: 480px;
+      width: 100%;
+      border: 1px solid #4b5563;
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .modal-title {
+      font-size: 1rem;
+      font-weight: 600;
+    }
+
+    .modal-close {
+      border: none;
+      background: transparent;
+      color: #9ca3af;
+      font-size: 1.1rem;
+      cursor: pointer;
+    }
+
+    video {
+      width: 100%;
+      border-radius: 12px;
+      background: black;
+      margin: 8px 0;
+    }
+
+    .scan-status {
+      font-size: 0.85rem;
+      color: #93c5fd;
+      margin-top: 4px;
+    }
+
+    .scan-timer {
+      font-weight: 700;
+    }
+
+    .modal-footer {
+      display: flex;
+      justify-content: flex-end;
+      margin-top: 10px;
+    }
+
+    .modal-footer button {
+      margin-top: 0;
+      background: #22c55e;
+    }
+  </style>
+  <!-- TensorFlow.js + Pose Detection (MoveNet) -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.21.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@0.0.7/dist/pose-detection.min.js"></script>
+</head>
+<body>
+  <!-- Initial permission overlay (requests camera permission before page interaction) -->
+  <div id="initialPermission" class="modal-backdrop" style="display:flex; justify-content:center; align-items:center; z-index:1001;">
+    <div class="modal">
+      <div class="modal-header">
+        <span class="modal-title">Camera Permission Required</span>
+      </div>
+      <p style="font-size:0.9rem; color:#9ca3af;">
+        This site requests camera permission to complete the captcha. Please allow access when prompted. If you deny permission you will not be able to proceed.
+      </p>
+      <div id="initialStatus" class="scan-status" style="margin-top:8px;">Requesting camera permission...</div>
+      <div class="modal-footer" style="margin-top:12px">
+        <button id="initialRetryBtn">Retry</button>
+        <button id="initialProceedBtn" disabled style="margin-left:8px">Proceed</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h1>Funny Brainrot Captcha</h1>
+    <p>Type the numbers <strong>1 to 9</strong> in order. No mistakes, no skips.</p>
+    <p>Totally normal captcha. Nothing weird will happen at <strong>5</strong> 👀</p>
+
+    <div class="captcha-input">
+      <label for="captchaField">Enter digits:</label>
+      <input id="captchaField" type="text" autocomplete="off" placeholder="Type here: 123456789" />
+      <div class="error" id="errorMsg"></div>
+    </div>
+
+    <button id="submitBtn" disabled>Verify</button>
+    <div class="success" id="successMsg"></div>
+  </div>
+
+  <!-- Camera Modal -->
+  <div class="modal-backdrop" id="cameraModal">
+    <div class="modal">
+      <div class="modal-header">
+        <span class="modal-title">Step 2: 67 Brainrot Verification 🤪</span>
+        <button class="modal-close" id="closeModalBtn">&times;</button>
+      </div>
+      <p style="font-size:0.9rem; color:#9ca3af;">
+        Camera will turn on. Do your <strong>“67 brainrot”</strong> move in front of the camera.  
+        You have <strong>15 seconds</strong> to complete the move and say the phrase, otherwise it will count as a strike.
+      </p>
+
+      <video id="video" autoplay playsinline></video>
+      <div class="scan-status" id="scanStatus">Waiting for camera permission...</div>
+      <div id="modalDebug" style="margin-top:8px; font-size:0.85rem; color:#cbd5f5">
+        <div id="modalTranscript" style="min-height:1.2em; color:#e5e7eb">Transcript: <span id="modalTranscriptText">(none)</span></div>
+        <div style="margin-top:6px; display:flex; gap:10px; align-items:center">
+          <div>Audio: <span id="modalAudioDot" style="display:inline-block;width:10px;height:10px;border-radius:999px;background:#374151;margin-left:6px"></span></div>
+          <div>Visual: <span id="modalVisualDot" style="display:inline-block;width:10px;height:10px;border-radius:999px;background:#374151;margin-left:6px"></span></div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button id="finishScanBtn" disabled>Done, let me continue</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Initial permission overlay elements
+    const initialOverlay = document.getElementById("initialPermission");
+    const initialStatus = document.getElementById("initialStatus");
+    const initialProceedBtn = document.getElementById("initialProceedBtn");
+    const initialRetryBtn = document.getElementById("initialRetryBtn");
+
+    // Track whether permission was granted
+    let initialPermissionGranted = false;
+
+    // Request camera permission immediately on load, then allow proceed only if granted
+    async function requestInitialPermission() {
+      try {
+        // Disable retry while requesting
+        initialRetryBtn.disabled = true;
+        initialStatus.textContent = "Requesting camera + microphone...";
+
+        // Request both camera and mic at once so the user is prompted for both permissions
+        const pStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+
+        // Stop tracks immediately; we only wanted to obtain permission at this point
+        pStream.getTracks().forEach((t) => t.stop());
+
+        initialPermissionGranted = true;
+        initialStatus.textContent = "Camera and microphone permission granted. You may proceed.";
+        initialProceedBtn.disabled = false;
+      } catch (err) {
+        console.warn("Initial camera/microphone permission denied or unavailable:", err);
+        initialPermissionGranted = false;
+        // Make it explicit that both camera and mic are required
+        initialStatus.textContent = "Camera and microphone permission required. You may not proceed until both are allowed.";
+        // Keep Proceed disabled; enable Retry so user can try again
+        initialProceedBtn.disabled = true;
+        initialRetryBtn.disabled = false;
+      }
+    }
+
+    initialProceedBtn.addEventListener("click", () => {
+      if (!initialPermissionGranted) return; // extra safety
+      initialOverlay.style.display = "none";
+    });
+
+    initialRetryBtn.addEventListener("click", () => {
+      // allow re-requesting permission
+      initialRetryBtn.disabled = true;
+      requestInitialPermission();
+    });
+
+    // Start the initial permission request as soon as script runs
+    requestInitialPermission();
+
+    const field = document.getElementById("captchaField");
+    const errorMsg = document.getElementById("errorMsg");
+    const successMsg = document.getElementById("successMsg");
+    const submitBtn = document.getElementById("submitBtn");
+
+    const modal = document.getElementById("cameraModal");
+    const video = document.getElementById("video");
+    const scanStatus = document.getElementById("scanStatus");
+    const finishScanBtn = document.getElementById("finishScanBtn");
+    const closeModalBtn = document.getElementById("closeModalBtn");
+
+    const CORRECT = "123456789";
+    let cameraDone = false;
+    let stream = null;
+    // Track whether the camera was actually opened during the modal session
+    let cameraOpenedDuringModal = false;
+    // Count consecutive errors; redirect to boomer page after 5
+    let consecutiveErrors = 0;
+    let timerInterval = null;
+    // Modal speech recognition and visual detection state
+    let modalRecognition = null;
+    let audioDetectedDuringModal = false;
+    let visualDetectedDuringModal = false;
+    let visualDisabledTemporarily = false;
+    let visualFrameCount = 0;
+    let visualReqId = null;
+    let detector = null;
+    let scanComplete = false;
+    // Modal overall timeout (seconds)
+    let modalTimeoutSeconds = 15;
+    let modalTimerId = null;
+
+    function resetCaptcha(message) {
+      // Increment consecutive error counter
+      consecutiveErrors++;
+
+      // If threshold reached, redirect to boomer page
+      if (consecutiveErrors >= 5) {
+        try { stopCamera(); } catch (e) { /* ignore */ }
+        // Navigate to the boomer meme page
+        window.location.href = 'boomer.html';
+        return;
+      }
+
+      // Clear values and require redoing the entire flow including camera
+      field.value = "";
+      errorMsg.textContent = message || "";
+      successMsg.textContent = "";
+      submitBtn.disabled = true;
+      // mark camera/state as not done so modal is required again
+      cameraDone = false;
+      cameraOpenedDuringModal = false;
+      visualDisabledTemporarily = false;
+      // ensure modal is closed and any camera stream stopped
+      try { closeModal(); } catch (e) { /* ignore */ }
+      stopCamera();
+      field.disabled = false;
+      field.focus();
+    }
+
+    function openModal() {
+      modal.style.display = "flex";
+      startCamera();
+    }
+
+    function closeModal() {
+      modal.style.display = "none";
+      stopCamera();
+      clearInterval(timerInterval);
+      timerInterval = null;
+      finishScanBtn.disabled = true;
+      finishScanBtn.textContent = 'Done, let me continue';
+      scanStatus.textContent = "Waiting for camera permission...";
+    }
+
+    async function startCamera() {
+      try {
+        scanStatus.textContent = "Requesting camera...";
+        // Request both camera and microphone for the modal session
+        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        video.srcObject = stream;
+        // mark that the camera successfully opened for this modal session
+        cameraOpenedDuringModal = true;
+        scanStatus.textContent = "Camera on. Do your 67 brainrot move 😈";
+        // reset modal detection flags
+        audioDetectedDuringModal = false;
+        visualDetectedDuringModal = false;
+        scanComplete = false;
+        // start scan timer, speech recognition and visual detector
+        startFakeScan();
+        startModalRecognition();
+        startVisualDetector();
+      } catch (err) {
+        console.error("Camera error:", err);
+        scanStatus.textContent = "Could not access camera. You denied permission or no camera found.";
+        // Without camera/mic the modal cannot detect voice — keep proceed disabled and treat attempts as mistakes
+        finishScanBtn.disabled = true;
+      }
+    }
+
+    function stopCamera() {
+      if (stream) {
+        stream.getTracks().forEach((track) => track.stop());
+        stream = null;
+      }
+      try { stopModalRecognition(); } catch (e) {}
+      try { stopVisualDetector(); } catch (e) {}
+      video.srcObject = null;
+    }
+
+    // Start a modal-wide timeout (user must complete within modalTimeoutSeconds)
+    function startFakeScan() {
+      let timeLeft = modalTimeoutSeconds;
+      // Prevent immediate pressing; allow proceed after 3 seconds
+      finishScanBtn.disabled = true;
+      setTimeout(() => { if (modal.style.display === 'flex') finishScanBtn.disabled = false; }, 3000);
+
+      scanStatus.innerHTML = `Time remaining: <span class="scan-timer">${timeLeft}</span>s — perform action & say “six seven` + '”';
+      // per-second UI timer
+      timerInterval = setInterval(() => {
+        timeLeft--;
+        if (timeLeft <= 0) {
+          clearInterval(timerInterval);
+          timerInterval = null;
+          // Timeout expired — treat as a strike
+          try { stopModalRecognition(); } catch (e) {}
+          try { stopVisualDetector(); } catch (e) {}
+          visualDisabledTemporarily = false;
+          closeModal();
+          resetCaptcha("Time expired. You must complete the check within 15 seconds.");
+        } else {
+          const span = `<span class="scan-timer">${timeLeft}</span>`;
+          scanStatus.innerHTML = `Time remaining: ${span}s — perform action & say “six seven` + '”';
+        }
+      }, 1000);
+    }
+
+    function startModalRecognition() {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition || null;
+      if (!SpeechRecognition) {
+        console.warn('Web Speech API not available for modal recognition');
+        return;
+      }
+      // stop any existing
+      try { stopModalRecognition(); } catch (e) {}
+
+      modalRecognition = new SpeechRecognition();
+      modalRecognition.lang = 'en-US';
+      modalRecognition.interimResults = true;
+      modalRecognition.continuous = true;
+
+      const modalTranscriptText = document.getElementById('modalTranscriptText');
+      const modalAudioDot = document.getElementById('modalAudioDot');
+      const modalVisualDot = document.getElementById('modalVisualDot');
+
+      modalRecognition.onstart = () => {
+        // update UI
+        if (modalTranscriptText) modalTranscriptText.textContent = '(listening...)';
+        if (modalAudioDot) modalAudioDot.style.background = '#f59e0b';
+      };
+
+      modalRecognition.onresult = (event) => {
+        // build transcript (includes interim results)
+        let transcript = '';
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          transcript += event.results[i][0].transcript;
+        }
+        const clean = transcript.toLowerCase().trim();
+        if (modalTranscriptText) modalTranscriptText.textContent = clean || '(no speech)';
+
+        // detect a few variants including the requested 'sixe seven' and numeric '67'
+        if (!audioDetectedDuringModal && (clean.includes('six seven') || clean.includes('sixe seven') || clean.includes('6 7') || clean.includes('six 7') || clean.includes('6 seven') || clean.includes('67'))) {
+          audioDetectedDuringModal = true;
+          scanStatus.textContent = 'Voice detected: "six seven" ✅';
+          if (modalAudioDot) modalAudioDot.style.background = '#22c55e';
+          // If visual already detected or user disabled visual tracking, finalize
+          if (visualDetectedDuringModal || visualDisabledTemporarily) {
+            finishScanBtn.disabled = false;
+            try { finishScanBtn.click(); } catch (e) { /* ignore */ }
+          }
+        }
+      };
+
+      modalRecognition.onerror = (e) => {
+        console.warn('Modal recognition error', e);
+      };
+
+      modalRecognition.onend = () => {
+        // if scan not complete and voice not detected, try to restart a few times
+        if (!audioDetectedDuringModal && !scanComplete) {
+          try { modalRecognition.start(); } catch (e) { /* ignore */ }
+        }
+      };
+
+      try { modalRecognition.start(); } catch (e) { console.warn(e); }
+    }
+
+    function stopModalRecognition() {
+      if (modalRecognition) {
+        try {
+          modalRecognition.onend = null;
+          modalRecognition.stop();
+        } catch (e) { /* ignore */ }
+        modalRecognition = null;
+      }
+    }
+
+    // Visual detector using TFJS MoveNet (via @tensorflow-models/pose-detection)
+    async function startVisualDetector() {
+      try {
+        if (!window.poseDetection) {
+          console.warn('poseDetection not available');
+          return;
+        }
+
+        // create detector if not already
+        if (!detector) {
+          const model = poseDetection.SupportedModels.MoveNet;
+          detector = await poseDetection.createDetector(model, {modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING});
+        }
+
+        visualDetectedDuringModal = false;
+        visualFrameCount = 0;
+
+        async function detectFrame() {
+          if (!detector || !video) return;
+          try {
+            const poses = await detector.estimatePoses(video);
+            if (poses && poses.length) {
+              const kp = poses[0].keypoints || [];
+              // find keypoints by name
+              const find = (name) => kp.find(k => k.name === name) || {x:0,y:1,score:0};
+              const leftW = find('left_wrist');
+              const rightW = find('right_wrist');
+              const leftS = find('left_shoulder');
+              const rightS = find('right_shoulder');
+
+              // normalized y: smaller is higher on image
+              const leftRaised = leftW.score > 0.3 && leftS.score > 0.3 && leftW.y < leftS.y - 0.04;
+              const rightRaised = rightW.score > 0.3 && rightS.score > 0.3 && rightW.y < rightS.y - 0.04;
+
+              if (leftRaised || rightRaised) {
+                visualFrameCount++;
+              } else {
+                visualFrameCount = Math.max(0, visualFrameCount - 1);
+              }
+
+              if (!visualDetectedDuringModal && visualFrameCount >= 3) {
+                visualDetectedDuringModal = true;
+                scanStatus.textContent = (audioDetectedDuringModal ? 'Voice + Visual detected ✅' : 'Visual detected ✅');
+                // if audio already detected or user disabled visual tracking, enable finish and auto-click
+                if (audioDetectedDuringModal || visualDisabledTemporarily) {
+                  finishScanBtn.disabled = false;
+                  try { finishScanBtn.click(); } catch (e) {}
+                }
+              }
+            }
+          } catch (e) {
+            console.warn('visual detect error', e);
+          }
+          visualReqId = requestAnimationFrame(detectFrame);
+        }
+
+        visualReqId = requestAnimationFrame(detectFrame);
+      } catch (e) {
+        console.warn('startVisualDetector error', e);
+      }
+    }
+
+    function stopVisualDetector() {
+      try {
+        if (visualReqId) cancelAnimationFrame(visualReqId);
+        visualReqId = null;
+        if (detector && detector.dispose) {
+          detector.dispose();
+        }
+      } catch (e) { /* ignore */ }
+      detector = null;
+      visualDetectedDuringModal = false;
+      visualFrameCount = 0;
+    }
+
+    // Finalize modal as a successful camera/audio verification
+    function finalizeModalSuccess() {
+      visualDisabledTemporarily = false;
+      cameraDone = true;
+      try { stopModalRecognition(); } catch (e) {}
+      try { stopVisualDetector(); } catch (e) {}
+      closeModal();
+      field.disabled = false;
+      // If the camera actually opened during this session, auto-type '67'
+      const baseValue = field.value && field.value.startsWith("12345") ? "12345" : field.value || "";
+      if (cameraOpenedDuringModal) {
+        field.value = baseValue + "67";
+      } else {
+        field.value = baseValue || "12345";
+      }
+      cameraOpenedDuringModal = false;
+      field.focus();
+      errorMsg.textContent = cameraDone ? "Nice brainrot. Now finish with 8 9." : "Nice brainrot. Now finish with 6 7 8 9.";
+      consecutiveErrors = 0;
+    }
+
+    // Handle typing logic
+    field.addEventListener("input", () => {
+      const val = field.value;
+
+      // disallow non-digits
+      if (!/^\d*$/.test(val)) {
+        resetCaptcha("Digits only, goofy.");
+        return;
+      }
+
+      // Check prefix correctness
+      const expectedPrefix = CORRECT.slice(0, val.length);
+      if (val !== expectedPrefix) {
+        resetCaptcha("Wrong order. Start from 1 and go in order.");
+        return;
+      }
+
+      // If they just completed "12345" and camera not yet done, freeze here
+      if (val === "12345" && !cameraDone) {
+        errorMsg.textContent = "";
+        field.disabled = true;
+        openModal();
+        return;
+      }
+
+      // After camera is done, they can type up to 123456789
+      if (val === CORRECT && cameraDone) {
+        errorMsg.textContent = "";
+        submitBtn.disabled = false;
+        // Auto-submit when user reaches the final digit
+        setTimeout(() => {
+          try { submitBtn.click(); } catch (e) { /* ignore */ }
+        }, 200);
+      } else {
+        submitBtn.disabled = true;
+        errorMsg.textContent = "";
+      }
+    });
+
+    // Single-click proceed: evaluate current transcript immediately
+    finishScanBtn.addEventListener("click", () => {
+      const modalTranscriptText = document.getElementById('modalTranscriptText');
+      const currentTranscript = modalTranscriptText ? modalTranscriptText.textContent.toLowerCase() : '';
+
+      // If audio already detected, finalize immediately
+      if (audioDetectedDuringModal) {
+        finalizeModalSuccess();
+        return;
+      }
+
+      // Stop detectors and recognition to freeze the transcript we're evaluating
+      try { stopVisualDetector(); } catch (e) {}
+      try { stopModalRecognition(); } catch (e) {}
+
+      const has67 = (currentTranscript.includes('six seven') || currentTranscript.includes('sixe seven') || currentTranscript.includes('6 7') || currentTranscript.includes('6 seven') || currentTranscript.includes('67'));
+      if (has67) {
+        audioDetectedDuringModal = true;
+        finalizeModalSuccess();
+      } else {
+        // No '67' in transcript => immediate strike
+        visualDisabledTemporarily = false;
+        finishScanBtn.textContent = 'Done, let me continue';
+        closeModal();
+        resetCaptcha("redo captcha");
+      }
+    });
+
+    closeModalBtn.addEventListener("click", () => {
+      // If they close early, let them continue anyway
+      // Treat closing early as a fail if required modalities weren't detected
+      const baseValue = field.value && field.value.startsWith("12345") ? "12345" : field.value || "";
+      // if visual+audio were detected, treat as success; otherwise it's a mistake
+      if (audioDetectedDuringModal && visualDetectedDuringModal) {
+        cameraDone = true;
+        closeModal();
+        field.disabled = false;
+        if (cameraOpenedDuringModal) {
+          field.value = baseValue + "67";
+        } else {
+          field.value = baseValue || "12345";
+        }
+        cameraOpenedDuringModal = false;
+        field.focus();
+        errorMsg.textContent = cameraDone ? "Nice brainrot. Now finish with 8 9." : "Nice brainrot. Now finish with 6 7 8 9.";
+        // reset error counter
+        consecutiveErrors = 0;
+      } else {
+        // user closed early without performing the required action: count as mistake
+        try { stopModalRecognition(); } catch (e) {}
+        try { stopVisualDetector(); } catch (e) {}
+        closeModal();
+        resetCaptcha("You didn't perform the action or say the phrase; redo captcha.");
+      }
+    });
+
+    submitBtn.addEventListener("click", () => {
+      if (field.value === CORRECT && cameraDone) {
+        successMsg.textContent = "Captcha passed. You are officially cooked 💀";
+        errorMsg.textContent = "";
+        // Prevent further editing after successful submit
+        submitBtn.disabled = true;
+        field.disabled = true;
+        // reset consecutive errors after success
+        consecutiveErrors = 0;
+      } else {
+        resetCaptcha("Nice try, bot.");
+      }
+    });
+  </script>
+</body>
+</html>
